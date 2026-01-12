@@ -4,34 +4,26 @@ import os
 import sys
 import re
 
-def escape_md(text: str) -> str:
-    """
-    Экранируем спецсимволы для MarkdownV2
-    """
-    if not text:
-        return ""
-    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
-
-
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
+# ───────────────
+# Настройки
+# ───────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
 MASTER_ID = os.getenv("MASTER_ID")
+
+if not BOT_TOKEN:
+    print("❌ BOT_TOKEN не знайдено")
+    sys.exit(1)
 
 if not MASTER_ID:
     print("❌ MASTER_ID не знайдено")
     sys.exit(1)
 
 MASTER_ID = int(MASTER_ID)
-
-if not BOT_TOKEN:
-    print("❌ BOT_TOKEN не знайдено")
-    sys.exit(1)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,7 +36,18 @@ dp = Dispatcher()
 orders = {}
 
 # ───────────────
-# КНОПКИ
+# Функція для безпечного MarkdownV2
+# ───────────────
+def escape_md(text: str) -> str:
+    """
+    Екранируем спецсимволы для MarkdownV2
+    """
+    if not text:
+        return ""
+    return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!])', r'\\\1', text)
+
+# ───────────────
+# Кнопки
 # ───────────────
 def main_menu():
     kb = InlineKeyboardBuilder()
@@ -83,7 +86,7 @@ async def start(message: Message):
     )
 
 # ───────────────
-# МЕНЮ
+# Меню замовлення
 # ───────────────
 @dp.callback_query(F.data == "order")
 async def order_start(call: CallbackQuery):
@@ -125,7 +128,6 @@ async def get_date(message: Message):
     )
 
 
-
 @dp.callback_query(F.data.startswith("time_"))
 async def choose_time(call: CallbackQuery):
     time = call.data.replace("time_", "")
@@ -134,17 +136,17 @@ async def choose_time(call: CallbackQuery):
     orders[user_id]["time"] = time
     order = orders[user_id]
 
-    # Уведомление клиенту
+    # Повідомлення клієнту
     await call.message.edit_text(
         "✅ **Запис підтверджено!**\n\n"
-        f"💅 Послуга: {order['service']}\n"
-        f"📅 Дата: {order['date']}\n"
-        f"⏰ Час: {order['time']}\n\n"
+        f"💅 Послуга: {escape_md(order['service'])}\n"
+        f"📅 Дата: {escape_md(order['date'])}\n"
+        f"⏰ Час: {escape_md(order['time'])}\n\n"
         "Ми зв’яжемось з вами найближчим часом 💖",
         parse_mode="Markdown"
     )
 
-    # Уведомление мастеру (await **внутри функции!**)
+    # 🔔 Повідомлення майстру
     username = escape_md(call.from_user.username or "без_username")
     service = escape_md(order['service'])
     date = escape_md(order['date'])
@@ -153,7 +155,7 @@ async def choose_time(call: CallbackQuery):
     await bot.send_message(
         chat_id=MASTER_ID,
         text=(
-            "📩 **Нове замовлення!**\n\n"
+            f"📩 **Нове замовлення\\!**\n\n"
             f"👤 Клієнт: @{username}\n"
             f"💅 Послуга: {service}\n"
             f"📅 Дата: {date}\n"
@@ -162,11 +164,21 @@ async def choose_time(call: CallbackQuery):
         parse_mode="MarkdownV2"
     )
 
-
-
+# ───────────────
+# Контакти
+# ───────────────
+@dp.callback_query(F.data == "contacts")
+async def contacts(call: CallbackQuery):
+    await call.message.edit_text(
+        "📞 **Контакти**\n\n"
+        "Instagram: @your_instagram\n"
+        "Телефон: +380 XX XXX XX XX",
+        parse_mode="Markdown",
+        reply_markup=main_menu()
+    )
 
 # ───────────────
-# ЗАПУСК
+# Запуск
 # ───────────────
 async def main():
     await dp.start_polling(bot)
@@ -174,8 +186,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-
-
-
