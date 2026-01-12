@@ -16,6 +16,8 @@ from aiogram.filters import Command
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MASTER_ID = int(os.getenv("MASTER_ID"))
 
+MASTER_PHONE = "+380939547603"
+
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(BOT_TOKEN)
@@ -31,11 +33,11 @@ SERVICES = [
 
 TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00"]
 
-# ───────────── ХРАНЕНИЕ ДАННЫХ ─────────────
+# ───────────── ХРАНЕНИЕ ─────────────
 user_states = {}
 user_orders = {}
 
-# ───────────── ГЛАВНЫЕ КНОПКИ (КАК НА ФОТО) ─────────────
+# ───────────── КЛАВИАТУРЫ ─────────────
 def main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -48,7 +50,16 @@ def main_keyboard():
         resize_keyboard=True
     )
 
-# ───────────── /start ─────────────
+def phone_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📲 Надіслати номер", request_contact=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# ───────────── START ─────────────
 @dp.message(Command("start"))
 async def start(message: Message):
     await message.answer(
@@ -70,15 +81,16 @@ async def start_order(message: Message):
 
 @dp.callback_query(F.data.startswith("service:"))
 async def choose_service(call: CallbackQuery):
-    service = call.data.split(":", 1)[1]
-    user_states[call.from_user.id]["service"] = service
-    await call.message.answer("📅 Напишіть дату (наприклад 15.01):")
+    user_states[call.from_user.id]["service"] = call.data.split(":", 1)[1]
+    await call.message.answer("📅 Введіть дату (наприклад 15.01):")
 
 @dp.message(F.text.regexp(r"\d{2}\.\d{2}"))
 async def choose_date(message: Message):
-    if message.from_user.id not in user_states:
+    uid = message.from_user.id
+    if uid not in user_states:
         return
-    user_states[message.from_user.id]["date"] = message.text
+
+    user_states[uid]["date"] = message.text
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -89,30 +101,45 @@ async def choose_date(message: Message):
     await message.answer("⏰ Оберіть час:", reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("time:"))
-async def finish_order(call: CallbackQuery):
-    time = call.data.split(":", 1)[1]
+async def choose_time(call: CallbackQuery):
     uid = call.from_user.id
+    user_states[uid]["time"] = call.data.split(":", 1)[1]
+
+    await call.message.answer(
+        "📞 Для підтвердження запису, будь ласка, поділіться номером телефону",
+        reply_markup=phone_keyboard()
+    )
+
+# ───────────── ПОЛУЧЕНИЕ ТЕЛЕФОНА ─────────────
+@dp.message(F.contact)
+async def get_phone(message: Message):
+    uid = message.from_user.id
+    if uid not in user_states:
+        await message.answer("❗ Немає активного запису.")
+        return
 
     order = user_states.pop(uid)
-    order["time"] = time
+    order["phone"] = message.contact.phone_number
+    order["name"] = message.from_user.full_name
 
     user_orders.setdefault(uid, []).append(order)
 
-    await call.message.answer(
-        "✅ Запис успішно створено!\nМи з вами звʼяжемось 💖",
+    await message.answer(
+        "✅ Запис підтверджено!\nМи звʼяжемось з вами найближчим часом 💖",
         reply_markup=main_keyboard()
     )
 
     await bot.send_message(
         MASTER_ID,
         f"📩 НОВИЙ ЗАПИС\n\n"
-        f"👤 @{call.from_user.username or call.from_user.first_name}\n"
+        f"👤 {order['name']}\n"
+        f"📞 {order['phone']}\n"
         f"💅 {order['service']}\n"
         f"📅 {order['date']}\n"
         f"⏰ {order['time']}"
     )
 
-# ───────────── СКАСУВАННЯ ЗАПИСУ ─────────────
+# ───────────── СКАСУВАННЯ ─────────────
 @dp.message(F.text == "❌ Скасувати запис")
 async def cancel_order(message: Message):
     orders = user_orders.get(message.from_user.id)
@@ -122,12 +149,10 @@ async def cancel_order(message: Message):
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=f"{o['service']} | {o['date']} {o['time']}",
-                    callback_data=f"cancel:{i}"
-                )
-            ]
+            [InlineKeyboardButton(
+                text=f"{o['service']} | {o['date']} {o['time']}",
+                callback_data=f"cancel:{i}"
+            )]
             for i, o in enumerate(orders)
         ]
     )
@@ -135,23 +160,22 @@ async def cancel_order(message: Message):
 
 @dp.callback_query(F.data.startswith("cancel:"))
 async def confirm_cancel(call: CallbackQuery):
+    uid = call.from_user.id
     idx = int(call.data.split(":")[1])
-    order = user_orders[call.from_user.id].pop(idx)
+    order = user_orders[uid].pop(idx)
 
-    await call.message.answer(
-        "❌ Запис скасовано.",
-        reply_markup=main_keyboard()
-    )
+    await call.message.answer("❌ Запис скасовано.", reply_markup=main_keyboard())
 
     await bot.send_message(
         MASTER_ID,
         f"❌ ЗАПИС СКАСОВАНО\n\n"
-        f"👤 @{call.from_user.username or call.from_user.first_name}\n"
+        f"👤 {order['name']}\n"
+        f"📞 {order['phone']}\n"
         f"💅 {order['service']}\n"
         f"📅 {order['date']} {order['time']}"
     )
 
-# ───────────── ИНФО КНОПКИ ─────────────
+# ───────────── ИНФО ─────────────
 @dp.message(F.text == "📜 Наші Послуги")
 async def show_services(message: Message):
     await message.answer(
@@ -162,7 +186,9 @@ async def show_services(message: Message):
 @dp.message(F.text == "📱 Соц. Мережі")
 async def socials(message: Message):
     await message.answer(
-        "📱 Ми в соцмережах:\nInstagram: @your_instagram\nTelegram: @your_channel",
+        f"📱 Наші контакти:\n\n"
+        f"📞 {MASTER_PHONE}\n"
+        f"Instagram: @your_instagram",
         reply_markup=main_keyboard()
     )
 
@@ -173,7 +199,7 @@ async def feedback(message: Message):
         reply_markup=main_keyboard()
     )
 
-# ───────────── ЗАПУСК ─────────────
+# ───────────── RUN ─────────────
 async def main():
     await dp.start_polling(bot)
 
