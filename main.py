@@ -1,210 +1,181 @@
 import asyncio
 import logging
 import os
-import sys
-import re
-
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import (
+    Message,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery
+)
 from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# ───────────────
-# Настройки
-# ───────────────
+# ───────────── НАСТРОЙКИ ─────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MASTER_ID = os.getenv("MASTER_ID")
-
-if not BOT_TOKEN:
-    print("❌ BOT_TOKEN не знайдено")
-    sys.exit(1)
-
-if not MASTER_ID:
-    print("❌ MASTER_ID не знайдено")
-    sys.exit(1)
-
-MASTER_ID = int(MASTER_ID)
+MASTER_ID = int(os.getenv("MASTER_ID"))
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# ───────────────
-# Тимчасове сховище замовлень
-# ───────────────
-orders = {}
+# ───────────── ПОСЛУГИ (МЕНЯЕШЬ ТУТ) ─────────────
+SERVICES = [
+    "Класичний манікюр",
+    "Манікюр + гель-лак",
+    "Нарощування",
+    "Педикюр"
+]
 
-# ───────────────
-# Функція для безпечного MarkdownV2
-# ───────────────
-def escape_md(text: str) -> str:
-    """
-    Екранируем спецсимволы для MarkdownV2
-    """
-    if not text:
-        return ""
-    return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!])', r'\\\1', text)
+TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00"]
 
-# ───────────────
-# Кнопки головного меню
-# ───────────────
-def main_menu_buttons():
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🛒 Зробити замовлення", callback_data="order")
-    kb.button(text="📜 Наше Меню", callback_data="menu")
-    kb.button(text="🏢 Як нас знайти", callback_data="contacts")
-    kb.button(text="✍️ Залишити відгук", callback_data="feedback")
-    kb.adjust(1)
-    return kb.as_markup()
+# ───────────── ХРАНЕНИЕ ДАННЫХ ─────────────
+user_states = {}
+user_orders = {}
 
-# ───────────────
-# Кнопки послуг
-# ───────────────
-def services_menu():
-    kb = InlineKeyboardBuilder()
-    kb.button(text="Класичний манікюр", callback_data="service_classic")
-    kb.button(text="Манікюр + гель-лак", callback_data="service_gel")
-    kb.button(text="Нарощування", callback_data="service_extension")
-    kb.adjust(1)
-    return kb.as_markup()
+# ───────────── ГЛАВНЫЕ КНОПКИ (КАК НА ФОТО) ─────────────
+def main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🛒 Записатися")],
+            [KeyboardButton(text="📜 Наші Послуги")],
+            [KeyboardButton(text="📱 Соц. Мережі")],
+            [KeyboardButton(text="✍️ Залишити відгук")],
+            [KeyboardButton(text="❌ Скасувати запис")]
+        ],
+        resize_keyboard=True
+    )
 
-# ───────────────
-# Кнопки часу
-# ───────────────
-def time_menu():
-    kb = InlineKeyboardBuilder()
-    for t in ["10:00", "12:00", "14:00", "16:00", "18:00"]:
-        kb.button(text=t, callback_data=f"time_{t}")
-    kb.adjust(3)
-    return kb.as_markup()
-
-# ───────────────
-# /start
-# ───────────────
+# ───────────── /start ─────────────
 @dp.message(Command("start"))
 async def start(message: Message):
     await message.answer(
-        "Вітаю 💖\nОберіть дію 👇",
-        reply_markup=main_menu_buttons()
+        "💅 Вітаємо у студії манікюру!\nОберіть дію 👇",
+        reply_markup=main_keyboard()
     )
 
-# ───────────────
-# Обработка главных кнопок
-# ───────────────
-@dp.callback_query(F.data == "order")
-async def order_start(call: CallbackQuery):
-    orders[call.from_user.id] = {}
-    await call.message.edit_text(
-        "💅 Оберіть послугу для замовлення",
-        reply_markup=services_menu()
+# ───────────── ЗАПИС ─────────────
+@dp.message(F.text == "🛒 Записатися")
+async def start_order(message: Message):
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=s, callback_data=f"service:{s}")]
+            for s in SERVICES
+        ]
     )
+    user_states[message.from_user.id] = {}
+    await message.answer("💅 Оберіть послугу:", reply_markup=kb)
 
-@dp.callback_query(F.data == "menu")
-async def show_menu(call: CallbackQuery):
-    await call.message.edit_text(
-        "📜 Наше Меню:\n"
-        "1. Класичний манікюр\n"
-        "2. Манікюр + гель-лак\n"
-        "3. Нарощування",
-        reply_markup=main_menu_buttons()
-    )
-
-@dp.callback_query(F.data == "contacts")
-async def show_contacts(call: CallbackQuery):
-    await call.message.edit_text(
-        "🏢 Як нас знайти:\n"
-        "Instagram: @your_instagram\n"
-        "Телефон: +380 XX XXX XX XX",
-        reply_markup=main_menu_buttons()
-    )
-
-@dp.callback_query(F.data == "feedback")
-async def feedback(call: CallbackQuery):
-    await call.message.edit_text(
-        "✍️ Залиште свій відгук у чаті, будь ласка.",
-        reply_markup=main_menu_buttons()
-    )
-
-# ───────────────
-# Обработка выбора услуги
-# ───────────────
-@dp.callback_query(F.data.startswith("service_"))
+@dp.callback_query(F.data.startswith("service:"))
 async def choose_service(call: CallbackQuery):
-    service_map = {
-        "service_classic": "Класичний манікюр",
-        "service_gel": "Манікюр + гель-лак",
-        "service_extension": "Нарощування",
-    }
+    service = call.data.split(":", 1)[1]
+    user_states[call.from_user.id]["service"] = service
+    await call.message.answer("📅 Напишіть дату (наприклад 15.01):")
 
-    orders[call.from_user.id]["service"] = service_map[call.data]
-
-    await call.message.edit_text(
-        "Напишіть бажану дату 📅\nНаприклад: 15.01"
-    )
-
-# ───────────────
-# Получаем дату
-# ───────────────
-@dp.message()
-async def get_date(message: Message):
-    user_id = message.from_user.id
-
-    if user_id not in orders or "service" not in orders[user_id]:
+@dp.message(F.text.regexp(r"\d{2}\.\d{2}"))
+async def choose_date(message: Message):
+    if message.from_user.id not in user_states:
         return
+    user_states[message.from_user.id]["date"] = message.text
 
-    orders[user_id]["date"] = message.text
-
-    await message.answer(
-        "Оберіть зручний час ⏰",
-        reply_markup=time_menu()
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t, callback_data=f"time:{t}")]
+            for t in TIMES
+        ]
     )
+    await message.answer("⏰ Оберіть час:", reply_markup=kb)
 
-# ───────────────
-# Выбор времени и уведомление мастеру
-# ───────────────
-@dp.callback_query(F.data.startswith("time_"))
-async def choose_time(call: CallbackQuery):
-    time = call.data.replace("time_", "")
-    user_id = call.from_user.id
+@dp.callback_query(F.data.startswith("time:"))
+async def finish_order(call: CallbackQuery):
+    time = call.data.split(":", 1)[1]
+    uid = call.from_user.id
 
-    orders[user_id]["time"] = time
-    order = orders[user_id]
+    order = user_states.pop(uid)
+    order["time"] = time
 
-    # Уведомление клиенту
-    await call.message.edit_text(
-        "✅ **Запис підтверджено!**\n\n"
-        f"💅 Послуга: {escape_md(order['service'])}\n"
-        f"📅 Дата: {escape_md(order['date'])}\n"
-        f"⏰ Час: {escape_md(order['time'])}\n\n"
-        "Ми зв’яжемось з вами найближчим часом 💖",
-        parse_mode="Markdown"
+    user_orders.setdefault(uid, []).append(order)
+
+    await call.message.answer(
+        "✅ Запис успішно створено!\nМи з вами звʼяжемось 💖",
+        reply_markup=main_keyboard()
     )
-
-    # Уведомление мастеру
-    username = escape_md(call.from_user.username or "без_username")
-    service = escape_md(order['service'])
-    date = escape_md(order['date'])
-    time_text = escape_md(order['time'])
 
     await bot.send_message(
-        chat_id=MASTER_ID,
-        text=(
-            f"📩 **Нове замовлення\\!**\n\n"
-            f"👤 Клієнт: @{username}\n"
-            f"💅 Послуга: {service}\n"
-            f"📅 Дата: {date}\n"
-            f"⏰ Час: {time_text}"
-        ),
-        parse_mode="MarkdownV2"
+        MASTER_ID,
+        f"📩 НОВИЙ ЗАПИС\n\n"
+        f"👤 @{call.from_user.username or call.from_user.first_name}\n"
+        f"💅 {order['service']}\n"
+        f"📅 {order['date']}\n"
+        f"⏰ {order['time']}"
     )
 
-# ───────────────
-# Запуск
-# ───────────────
+# ───────────── СКАСУВАННЯ ЗАПИСУ ─────────────
+@dp.message(F.text == "❌ Скасувати запис")
+async def cancel_order(message: Message):
+    orders = user_orders.get(message.from_user.id)
+    if not orders:
+        await message.answer("❗ У вас немає активних записів.", reply_markup=main_keyboard())
+        return
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{o['service']} | {o['date']} {o['time']}",
+                    callback_data=f"cancel:{i}"
+                )
+            ]
+            for i, o in enumerate(orders)
+        ]
+    )
+    await message.answer("Оберіть запис для скасування:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("cancel:"))
+async def confirm_cancel(call: CallbackQuery):
+    idx = int(call.data.split(":")[1])
+    order = user_orders[call.from_user.id].pop(idx)
+
+    await call.message.answer(
+        "❌ Запис скасовано.",
+        reply_markup=main_keyboard()
+    )
+
+    await bot.send_message(
+        MASTER_ID,
+        f"❌ ЗАПИС СКАСОВАНО\n\n"
+        f"👤 @{call.from_user.username or call.from_user.first_name}\n"
+        f"💅 {order['service']}\n"
+        f"📅 {order['date']} {order['time']}"
+    )
+
+# ───────────── ИНФО КНОПКИ ─────────────
+@dp.message(F.text == "📜 Наші Послуги")
+async def show_services(message: Message):
+    await message.answer(
+        "💅 Наші послуги:\n\n" + "\n".join(f"• {s}" for s in SERVICES),
+        reply_markup=main_keyboard()
+    )
+
+@dp.message(F.text == "📱 Соц. Мережі")
+async def socials(message: Message):
+    await message.answer(
+        "📱 Ми в соцмережах:\nInstagram: @your_instagram\nTelegram: @your_channel",
+        reply_markup=main_keyboard()
+    )
+
+@dp.message(F.text == "✍️ Залишити відгук")
+async def feedback(message: Message):
+    await message.answer(
+        "💖 Напишіть ваш відгук просто в чаті!",
+        reply_markup=main_keyboard()
+    )
+
+# ───────────── ЗАПУСК ─────────────
 async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-
