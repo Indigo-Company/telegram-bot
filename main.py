@@ -103,7 +103,7 @@ async def order_start(call: CallbackQuery):
 @dp.callback_query(F.data == "menu")
 async def show_menu(call: CallbackQuery):
     await call.message.edit_text(
-        "📜 Наше меню:\n"
+        "📜 Види манікюру:\n"
         "1. Класичний манікюр\n"
         "2. Манікюр + гель-лак\n"
         "3. Нарощування",
@@ -113,7 +113,7 @@ async def show_menu(call: CallbackQuery):
 @dp.callback_query(F.data == "contacts")
 async def show_contacts(call: CallbackQuery):
     await call.message.edit_text(
-        "🏢 Ми знаходимося тут:\n"
+        "🏢 Соц. мережі:\n"
         "Instagram: @your_instagram\n"
         "Телефон: +380 XX XXX XX XX",
         reply_markup=main_menu_buttons()
@@ -207,3 +207,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
