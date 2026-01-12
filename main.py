@@ -10,6 +10,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+MASTER_ID = os.getenv("MASTER_ID")
+
+if not MASTER_ID:
+    print("❌ MASTER_ID не знайдено")
+    sys.exit(1)
+
+MASTER_ID = int(MASTER_ID)
+
 if not BOT_TOKEN:
     print("❌ BOT_TOKEN не знайдено")
     sys.exit(1)
@@ -112,9 +120,9 @@ async def choose_time(call: CallbackQuery):
     user_id = call.from_user.id
 
     orders[user_id]["time"] = time
-
     order = orders[user_id]
 
+    # Повідомлення клієнту
     await call.message.edit_text(
         "✅ **Запис підтверджено!**\n\n"
         f"💅 Послуга: {order['service']}\n"
@@ -123,6 +131,20 @@ async def choose_time(call: CallbackQuery):
         "Ми зв’яжемось з вами найближчим часом 💖",
         parse_mode="Markdown"
     )
+
+    # 🔔 Повідомлення майстру
+    await bot.send_message(
+        chat_id=MASTER_ID,
+        text=(
+            "📩 **Нове замовлення!**\n\n"
+            f"👤 Клієнт: @{call.from_user.username or 'без username'}\n"
+            f"💅 Послуга: {order['service']}\n"
+            f"📅 Дата: {order['date']}\n"
+            f"⏰ Час: {order['time']}"
+        ),
+        parse_mode="Markdown"
+    )
+
 
 # ───────────────
 # КОНТАКТИ
@@ -146,3 +168,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
