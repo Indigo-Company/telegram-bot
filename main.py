@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS orders (
     time TEXT
 )
 """)
-
 db.commit()
 
 # ───────────── DATA ─────────────
@@ -72,7 +71,10 @@ async def start(m: Message):
 @dp.message(F.text == "🛒 Записатися")
 async def order(m: Message):
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=s, callback_data=f"s:{s}")]] for s in SERVICES
+        inline_keyboard=[
+            [InlineKeyboardButton(text=s, callback_data=f"s:{s}")]
+            for s in SERVICES
+        ]
     )
     user_states[m.from_user.id] = {}
     await m.answer("Оберіть послугу:", reply_markup=kb)
@@ -89,6 +91,7 @@ async def date(m: Message):
         return
 
     user_states[uid]["date"] = m.text
+
     busy = sql.execute(
         "SELECT time FROM orders WHERE date=?", (m.text,)
     ).fetchall()
@@ -101,7 +104,10 @@ async def date(m: Message):
         return
 
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=t, callback_data=f"t:{t}")]] for t in free
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t, callback_data=f"t:{t}")]
+            for t in free
+        ]
     )
     await m.answer("Оберіть час:", reply_markup=kb)
 
@@ -139,62 +145,6 @@ async def phone(m: Message):
         f"📅 {d['date']} {d['time']}",
         disable_notification=False
     )
-
-# ───────────── CANCEL ─────────────
-@dp.message(F.text == "❌ Скасувати запис")
-async def cancel(m: Message):
-    rows = sql.execute(
-        "SELECT id, service, date, time FROM orders WHERE user_id=?",
-        (m.from_user.id,)
-    ).fetchall()
-
-    if not rows:
-        await m.answer("❗ Записів немає")
-        return
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=f"{r[1]} | {r[2]} {r[3]}", callback_data=f"del:{r[0]}")]
-            for r in rows
-        ]
-    )
-    await m.answer("Оберіть запис:", reply_markup=kb)
-
-@dp.callback_query(F.data.startswith("del:"))
-async def delete(c: CallbackQuery):
-    oid = c.data[4:]
-    sql.execute("DELETE FROM orders WHERE id=?", (oid,))
-    db.commit()
-
-    await c.message.answer("❌ Запис скасовано", reply_markup=main_kb())
-    await bot.send_message(MASTER_ID, "🔕 Запис скасовано", disable_notification=False)
-
-# ───────────── ADMIN ─────────────
-@dp.message(Command("admin"))
-async def admin(m: Message):
-    if m.from_user.id != MASTER_ID:
-        return
-    await m.answer("/records — всі записи\n/delete ID — видалити")
-
-@dp.message(Command("records"))
-async def records(m: Message):
-    if m.from_user.id != MASTER_ID:
-        return
-    rows = sql.execute("SELECT * FROM orders").fetchall()
-    text = "\n".join([f"{r[0]} | {r[4]} | {r[5]} {r[6]}" for r in rows])
-    await m.answer(text or "Порожньо")
-
-@dp.message(Command("delete"))
-async def admin_delete(m: Message):
-    if m.from_user.id != MASTER_ID:
-        return
-    try:
-        oid = m.text.split()[1]
-        sql.execute("DELETE FROM orders WHERE id=?", (oid,))
-        db.commit()
-        await m.answer("✅ Видалено")
-    except:
-        await m.answer("❌ Помилка")
 
 # ───────────── RUN ─────────────
 async def main():
