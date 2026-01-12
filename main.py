@@ -1,15 +1,6 @@
 import asyncio
 import logging
 import os
-
-from supabase import create_client
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
     Message,
@@ -20,19 +11,24 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import Command
+from supabase import create_client
 
 # ───────────── НАСТРОЙКИ ─────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MASTER_ID = int(os.getenv("MASTER_ID"))
-
 MASTER_PHONE = "+380939547603"
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# ───────────── ПОСЛУГИ (МЕНЯЕШЬ ТУТ) ─────────────
+# ───────────── ПОСЛУГИ ─────────────
 SERVICES = [
     "Класичний манікюр",
     "Манікюр + гель-лак",
@@ -131,12 +127,12 @@ async def get_phone(message: Message):
 
     phone = message.contact.phone_number
     full_name = message.from_user.full_name
-    username = message.from_user.username
+    username = message.from_user.username  # может быть None
 
     order["phone"] = phone
     order["name"] = full_name
 
-    # ⬇️ UPSERT (если клиент уже есть — обновится)
+    # ⬇️ СОХРАНЕНИЕ В SUPABASE
     supabase.table("clients").upsert({
         "user_id": uid,
         "username": username,
@@ -161,7 +157,6 @@ async def get_phone(message: Message):
         f"📅 {order['date']}\n"
         f"⏰ {order['time']}"
     )
-
 
 # ───────────── СКАСУВАННЯ ─────────────
 @dp.message(F.text == "❌ Скасувати запис")
@@ -229,4 +224,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
