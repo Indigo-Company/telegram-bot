@@ -11,24 +11,18 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import Command
-from supabase import create_client
 
 # ───────────── НАСТРОЙКИ ─────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MASTER_ID = int(os.getenv("MASTER_ID"))
 MASTER_PHONE = "+380939547603"
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# ───────────── ПОСЛУГИ ─────────────
+# ───────────── ПОСЛУГИ (МЕНЯЕШЬ ТУТ) ─────────────
 SERVICES = [
     "Класичний манікюр",
     "Манікюр + гель-лак",
@@ -57,9 +51,7 @@ def main_keyboard():
 
 def phone_keyboard():
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📲 Надіслати номер", request_contact=True)]
-        ],
+        keyboard=[[KeyboardButton(text="📲 Надіслати номер", request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True
     )
@@ -76,10 +68,7 @@ async def start(message: Message):
 @dp.message(F.text == "🛒 Записатися")
 async def start_order(message: Message):
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=s, callback_data=f"service:{s}")]
-            for s in SERVICES
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text=s, callback_data=f"service:{s}")] for s in SERVICES]
     )
     user_states[message.from_user.id] = {}
     await message.answer("💅 Оберіть послугу:", reply_markup=kb)
@@ -94,14 +83,9 @@ async def choose_date(message: Message):
     uid = message.from_user.id
     if uid not in user_states:
         return
-
     user_states[uid]["date"] = message.text
-
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t, callback_data=f"time:{t}")]
-            for t in TIMES
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text=t, callback_data=f"time:{t}")] for t in TIMES]
     )
     await message.answer("⏰ Оберіть час:", reply_markup=kb)
 
@@ -109,7 +93,6 @@ async def choose_date(message: Message):
 async def choose_time(call: CallbackQuery):
     uid = call.from_user.id
     user_states[uid]["time"] = call.data.split(":", 1)[1]
-
     await call.message.answer(
         "📞 Для підтвердження запису, будь ласка, поділіться номером телефону",
         reply_markup=phone_keyboard()
@@ -122,24 +105,9 @@ async def get_phone(message: Message):
     if uid not in user_states:
         await message.answer("❗ Немає активного запису.")
         return
-
     order = user_states.pop(uid)
-
-    phone = message.contact.phone_number
-    full_name = message.from_user.full_name
-    username = message.from_user.username  # может быть None
-
-    order["phone"] = phone
-    order["name"] = full_name
-
-    # ⬇️ СОХРАНЕНИЕ В SUPABASE
-    supabase.table("clients").upsert({
-        "user_id": uid,
-        "username": username,
-        "full_name": full_name,
-        "phone": phone
-    }).execute()
-
+    order["phone"] = message.contact.phone_number
+    order["name"] = message.from_user.full_name
     user_orders.setdefault(uid, []).append(order)
 
     await message.answer(
@@ -150,9 +118,8 @@ async def get_phone(message: Message):
     await bot.send_message(
         MASTER_ID,
         f"📩 НОВИЙ ЗАПИС\n\n"
-        f"👤 {full_name}\n"
-        f"🔗 @{username if username else 'немає'}\n"
-        f"📞 {phone}\n"
+        f"👤 {order['name']}\n"
+        f"📞 {order['phone']}\n"
         f"💅 {order['service']}\n"
         f"📅 {order['date']}\n"
         f"⏰ {order['time']}"
@@ -165,14 +132,14 @@ async def cancel_order(message: Message):
     if not orders:
         await message.answer("❗ У вас немає активних записів.", reply_markup=main_keyboard())
         return
-
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"{o['service']} | {o['date']} {o['time']}",
-                callback_data=f"cancel:{i}"
-            )]
-            for i, o in enumerate(orders)
+            [
+                InlineKeyboardButton(
+                    text=f"{o['service']} | {o['date']} {o['time']}",
+                    callback_data=f"cancel:{i}"
+                )
+            ] for i, o in enumerate(orders)
         ]
     )
     await message.answer("Оберіть запис для скасування:", reply_markup=kb)
@@ -182,9 +149,7 @@ async def confirm_cancel(call: CallbackQuery):
     uid = call.from_user.id
     idx = int(call.data.split(":")[1])
     order = user_orders[uid].pop(idx)
-
     await call.message.answer("❌ Запис скасовано.", reply_markup=main_keyboard())
-
     await bot.send_message(
         MASTER_ID,
         f"❌ ЗАПИС СКАСОВАНО\n\n"
