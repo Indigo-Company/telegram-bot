@@ -134,7 +134,7 @@ async def choose_time(call: CallbackQuery):
     orders[user_id]["time"] = time
     order = orders[user_id]
 
-    # Повідомлення клієнту
+    # Уведомление клиенту
     await call.message.edit_text(
         "✅ **Запис підтверджено!**\n\n"
         f"💅 Послуга: {order['service']}\n"
@@ -144,23 +144,24 @@ async def choose_time(call: CallbackQuery):
         parse_mode="Markdown"
     )
 
-    # 🔔 Повідомлення майстру
+    # Уведомление мастеру (await **внутри функции!**)
     username = escape_md(call.from_user.username or "без_username")
-service = escape_md(order['service'])
-date = escape_md(order['date'])
-time_text = escape_md(order['time'])
+    service = escape_md(order['service'])
+    date = escape_md(order['date'])
+    time_text = escape_md(order['time'])
 
-await bot.send_message(
-    chat_id=MASTER_ID,
-    text=(
-        "📩 **Нове замовлення!**\n\n"
-        f"👤 Клієнт: @{username}\n"
-        f"💅 Послуга: {service}\n"
-        f"📅 Дата: {date}\n"
-        f"⏰ Час: {time_text}"
-    ),
-    parse_mode="MarkdownV2"
-)
+    await bot.send_message(
+        chat_id=MASTER_ID,
+        text=(
+            "📩 **Нове замовлення!**\n\n"
+            f"👤 Клієнт: @{username}\n"
+            f"💅 Послуга: {service}\n"
+            f"📅 Дата: {date}\n"
+            f"⏰ Час: {time_text}"
+        ),
+        parse_mode="MarkdownV2"
+    )
+
 
 
 
@@ -173,6 +174,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
