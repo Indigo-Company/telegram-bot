@@ -1,21 +1,13 @@
 import asyncio
 import logging
 import os
+import sqlite3
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import (
-    Message,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    CallbackQuery
-)
+from aiogram.types import *
 from aiogram.filters import Command
 
-# ───────────── НАСТРОЙКИ ─────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MASTER_ID = int(os.getenv("MASTER_ID"))
-
 MASTER_PHONE = "+380939547603"
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +15,25 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# ───────────── ПОСЛУГИ (МЕНЯЕШЬ ТУТ) ─────────────
+# ───────────── DATABASE ─────────────
+db = sqlite3.connect("orders.db")
+sql = db.cursor()
+
+sql.execute("""
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    name TEXT,
+    phone TEXT,
+    service TEXT,
+    date TEXT,
+    time TEXT
+)
+""")
+
+db.commit()
+
+# ───────────── DATA ─────────────
 SERVICES = [
     "Класичний манікюр",
     "Манікюр + гель-лак",
@@ -32,172 +42,159 @@ SERVICES = [
 ]
 
 TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00"]
-
-# ───────────── ХРАНЕНИЕ ─────────────
 user_states = {}
-user_orders = {}
 
-# ───────────── КЛАВИАТУРЫ ─────────────
-def main_keyboard():
+# ───────────── KEYBOARDS ─────────────
+def main_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛒 Записатися")],
             [KeyboardButton(text="📜 Наші Послуги")],
             [KeyboardButton(text="📱 Соц. Мережі")],
-            [KeyboardButton(text="✍️ Залишити відгук")],
             [KeyboardButton(text="❌ Скасувати запис")]
         ],
         resize_keyboard=True
     )
 
-def phone_keyboard():
+def phone_kb():
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📲 Надіслати номер", request_contact=True)]
-        ],
+        keyboard=[[KeyboardButton(text="📲 Надіслати номер", request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True
     )
 
 # ───────────── START ─────────────
 @dp.message(Command("start"))
-async def start(message: Message):
-    await message.answer(
-        "💅 Вітаємо у студії манікюру!\nОберіть дію 👇",
-        reply_markup=main_keyboard()
-    )
+async def start(m: Message):
+    await m.answer("💅 Вітаємо! Оберіть дію 👇", reply_markup=main_kb())
 
-# ───────────── ЗАПИС ─────────────
+# ───────────── ORDER ─────────────
 @dp.message(F.text == "🛒 Записатися")
-async def start_order(message: Message):
+async def order(m: Message):
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=s, callback_data=f"service:{s}")]
-            for s in SERVICES
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text=s, callback_data=f"s:{s}")]] for s in SERVICES
     )
-    user_states[message.from_user.id] = {}
-    await message.answer("💅 Оберіть послугу:", reply_markup=kb)
+    user_states[m.from_user.id] = {}
+    await m.answer("Оберіть послугу:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("service:"))
-async def choose_service(call: CallbackQuery):
-    user_states[call.from_user.id]["service"] = call.data.split(":", 1)[1]
-    await call.message.answer("📅 Введіть дату (наприклад 15.01):")
+@dp.callback_query(F.data.startswith("s:"))
+async def service(c: CallbackQuery):
+    user_states[c.from_user.id]["service"] = c.data[2:]
+    await c.message.answer("Введіть дату (ДД.ММ):")
 
 @dp.message(F.text.regexp(r"\d{2}\.\d{2}"))
-async def choose_date(message: Message):
-    uid = message.from_user.id
+async def date(m: Message):
+    uid = m.from_user.id
     if uid not in user_states:
         return
 
-    user_states[uid]["date"] = message.text
+    user_states[uid]["date"] = m.text
+    busy = sql.execute(
+        "SELECT time FROM orders WHERE date=?", (m.text,)
+    ).fetchall()
+    busy_times = {b[0] for b in busy}
+
+    free = [t for t in TIMES if t not in busy_times]
+
+    if not free:
+        await m.answer("❌ На цю дату немає вільного часу.")
+        return
 
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t, callback_data=f"time:{t}")]
-            for t in TIMES
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text=t, callback_data=f"t:{t}")]] for t in free
     )
-    await message.answer("⏰ Оберіть час:", reply_markup=kb)
+    await m.answer("Оберіть час:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("time:"))
-async def choose_time(call: CallbackQuery):
-    uid = call.from_user.id
-    user_states[uid]["time"] = call.data.split(":", 1)[1]
+@dp.callback_query(F.data.startswith("t:"))
+async def time(c: CallbackQuery):
+    user_states[c.from_user.id]["time"] = c.data[2:]
+    await c.message.answer("Надішліть номер телефону:", reply_markup=phone_kb())
 
-    await call.message.answer(
-        "📞 Для підтвердження запису, будь ласка, поділіться номером телефону",
-        reply_markup=phone_keyboard()
-    )
-
-# ───────────── ПОЛУЧЕНИЕ ТЕЛЕФОНА ─────────────
 @dp.message(F.contact)
-async def get_phone(message: Message):
-    uid = message.from_user.id
+async def phone(m: Message):
+    uid = m.from_user.id
     if uid not in user_states:
-        await message.answer("❗ Немає активного запису.")
         return
 
-    order = user_states.pop(uid)
-    order["phone"] = message.contact.phone_number
-    order["name"] = message.from_user.full_name
+    phone = m.contact.phone_number
+    if not phone.startswith("+"):
+        phone = "+" + phone
 
-    user_orders.setdefault(uid, []).append(order)
+    d = user_states.pop(uid)
 
-    await message.answer(
-        "✅ Запис підтверджено!\nМи звʼяжемось з вами найближчим часом 💖",
-        reply_markup=main_keyboard()
+    sql.execute(
+        "INSERT INTO orders (user_id,name,phone,service,date,time) VALUES (?,?,?,?,?,?)",
+        (uid, m.from_user.full_name, phone, d["service"], d["date"], d["time"])
     )
+    db.commit()
+
+    await m.answer("✅ Запис підтверджено!", reply_markup=main_kb())
 
     await bot.send_message(
         MASTER_ID,
-        f"📩 НОВИЙ ЗАПИС\n\n"
-        f"👤 {order['name']}\n"
-        f"📞 {order['phone']}\n"
-        f"💅 {order['service']}\n"
-        f"📅 {order['date']}\n"
-        f"⏰ {order['time']}"
+        f"🔔 НОВИЙ ЗАПИС\n\n"
+        f"👤 {m.from_user.full_name}\n"
+        f"📞 {phone}\n"
+        f"💅 {d['service']}\n"
+        f"📅 {d['date']} {d['time']}",
+        disable_notification=False
     )
 
-# ───────────── СКАСУВАННЯ ─────────────
+# ───────────── CANCEL ─────────────
 @dp.message(F.text == "❌ Скасувати запис")
-async def cancel_order(message: Message):
-    orders = user_orders.get(message.from_user.id)
-    if not orders:
-        await message.answer("❗ У вас немає активних записів.", reply_markup=main_keyboard())
+async def cancel(m: Message):
+    rows = sql.execute(
+        "SELECT id, service, date, time FROM orders WHERE user_id=?",
+        (m.from_user.id,)
+    ).fetchall()
+
+    if not rows:
+        await m.answer("❗ Записів немає")
         return
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"{o['service']} | {o['date']} {o['time']}",
-                callback_data=f"cancel:{i}"
-            )]
-            for i, o in enumerate(orders)
+            [InlineKeyboardButton(text=f"{r[1]} | {r[2]} {r[3]}", callback_data=f"del:{r[0]}")]
+            for r in rows
         ]
     )
-    await message.answer("Оберіть запис для скасування:", reply_markup=kb)
+    await m.answer("Оберіть запис:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("cancel:"))
-async def confirm_cancel(call: CallbackQuery):
-    uid = call.from_user.id
-    idx = int(call.data.split(":")[1])
-    order = user_orders[uid].pop(idx)
+@dp.callback_query(F.data.startswith("del:"))
+async def delete(c: CallbackQuery):
+    oid = c.data[4:]
+    sql.execute("DELETE FROM orders WHERE id=?", (oid,))
+    db.commit()
 
-    await call.message.answer("❌ Запис скасовано.", reply_markup=main_keyboard())
+    await c.message.answer("❌ Запис скасовано", reply_markup=main_kb())
+    await bot.send_message(MASTER_ID, "🔕 Запис скасовано", disable_notification=False)
 
-    await bot.send_message(
-        MASTER_ID,
-        f"❌ ЗАПИС СКАСОВАНО\n\n"
-        f"👤 {order['name']}\n"
-        f"📞 {order['phone']}\n"
-        f"💅 {order['service']}\n"
-        f"📅 {order['date']} {order['time']}"
-    )
+# ───────────── ADMIN ─────────────
+@dp.message(Command("admin"))
+async def admin(m: Message):
+    if m.from_user.id != MASTER_ID:
+        return
+    await m.answer("/records — всі записи\n/delete ID — видалити")
 
-# ───────────── ИНФО ─────────────
-@dp.message(F.text == "📜 Наші Послуги")
-async def show_services(message: Message):
-    await message.answer(
-        "💅 Наші послуги:\n\n" + "\n".join(f"• {s}" for s in SERVICES),
-        reply_markup=main_keyboard()
-    )
+@dp.message(Command("records"))
+async def records(m: Message):
+    if m.from_user.id != MASTER_ID:
+        return
+    rows = sql.execute("SELECT * FROM orders").fetchall()
+    text = "\n".join([f"{r[0]} | {r[4]} | {r[5]} {r[6]}" for r in rows])
+    await m.answer(text or "Порожньо")
 
-@dp.message(F.text == "📱 Соц. Мережі")
-async def socials(message: Message):
-    await message.answer(
-        f"📱 Наші контакти:\n\n"
-        f"📞 {MASTER_PHONE}\n"
-        f"Instagram: @your_instagram",
-        reply_markup=main_keyboard()
-    )
-
-@dp.message(F.text == "✍️ Залишити відгук")
-async def feedback(message: Message):
-    await message.answer(
-        "💖 Напишіть ваш відгук просто в чаті!",
-        reply_markup=main_keyboard()
-    )
+@dp.message(Command("delete"))
+async def admin_delete(m: Message):
+    if m.from_user.id != MASTER_ID:
+        return
+    try:
+        oid = m.text.split()[1]
+        sql.execute("DELETE FROM orders WHERE id=?", (oid,))
+        db.commit()
+        await m.answer("✅ Видалено")
+    except:
+        await m.answer("❌ Помилка")
 
 # ───────────── RUN ─────────────
 async def main():
