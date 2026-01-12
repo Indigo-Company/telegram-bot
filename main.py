@@ -1,6 +1,15 @@
 import asyncio
 import logging
 import os
+
+from supabase import create_client
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
     Message,
@@ -119,8 +128,21 @@ async def get_phone(message: Message):
         return
 
     order = user_states.pop(uid)
-    order["phone"] = message.contact.phone_number
-    order["name"] = message.from_user.full_name
+
+    phone = message.contact.phone_number
+    full_name = message.from_user.full_name
+    username = message.from_user.username
+
+    order["phone"] = phone
+    order["name"] = full_name
+
+    # ⬇️ UPSERT (если клиент уже есть — обновится)
+    supabase.table("clients").upsert({
+        "user_id": uid,
+        "username": username,
+        "full_name": full_name,
+        "phone": phone
+    }).execute()
 
     user_orders.setdefault(uid, []).append(order)
 
@@ -132,12 +154,14 @@ async def get_phone(message: Message):
     await bot.send_message(
         MASTER_ID,
         f"📩 НОВИЙ ЗАПИС\n\n"
-        f"👤 {order['name']}\n"
-        f"📞 {order['phone']}\n"
+        f"👤 {full_name}\n"
+        f"🔗 @{username if username else 'немає'}\n"
+        f"📞 {phone}\n"
         f"💅 {order['service']}\n"
         f"📅 {order['date']}\n"
         f"⏰ {order['time']}"
     )
+
 
 # ───────────── СКАСУВАННЯ ─────────────
 @dp.message(F.text == "❌ Скасувати запис")
@@ -205,3 +229,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
