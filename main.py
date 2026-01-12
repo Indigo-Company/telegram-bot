@@ -4,11 +4,6 @@ import os
 import sys
 import re
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-
 def escape_md(text: str) -> str:
     """
     Экранируем спецсимволы для MarkdownV2
@@ -16,6 +11,13 @@ def escape_md(text: str) -> str:
     if not text:
         return ""
     return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
+
+
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -123,7 +125,6 @@ async def get_date(message: Message):
     )
 
 
-from aiogram.utils.markdown import escape_md
 
 @dp.callback_query(F.data.startswith("time_"))
 async def choose_time(call: CallbackQuery):
@@ -144,23 +145,23 @@ async def choose_time(call: CallbackQuery):
     )
 
     # 🔔 Повідомлення майстру
-    username = call.from_user.username or "без_username"
-    username = escape_md(username)
-    service = escape_md(order['service'])
-    date = escape_md(order['date'])
-    time_text = escape_md(order['time'])
+    username = escape_md(call.from_user.username or "без_username")
+service = escape_md(order['service'])
+date = escape_md(order['date'])
+time_text = escape_md(order['time'])
 
-    await bot.send_message(
-        chat_id=MASTER_ID,
-        text=(
-            "📩 **Нове замовлення!**\n\n"
-            f"👤 Клієнт: @{username}\n"
-            f"💅 Послуга: {service}\n"
-            f"📅 Дата: {date}\n"
-            f"⏰ Час: {time_text}"
-        ),
-        parse_mode="MarkdownV2"
-    )
+await bot.send_message(
+    chat_id=MASTER_ID,
+    text=(
+        "📩 **Нове замовлення!**\n\n"
+        f"👤 Клієнт: @{username}\n"
+        f"💅 Послуга: {service}\n"
+        f"📅 Дата: {date}\n"
+        f"⏰ Час: {time_text}"
+    ),
+    parse_mode="MarkdownV2"
+)
+
 
 
 # ───────────────
@@ -172,6 +173,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
