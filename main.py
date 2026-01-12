@@ -2,11 +2,20 @@ import asyncio
 import logging
 import os
 import sys
+import re
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+def escape_md(text: str) -> str:
+    """
+    Экранируем спецсимволы для MarkdownV2
+    """
+    if not text:
+        return ""
+    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -136,34 +145,23 @@ async def choose_time(call: CallbackQuery):
 
     # 🔔 Повідомлення майстру
     username = call.from_user.username or "без_username"
-    username = escape_md(username)  # Экранируем спецсимволы для MarkdownV2
+    username = escape_md(username)
+    service = escape_md(order['service'])
+    date = escape_md(order['date'])
+    time_text = escape_md(order['time'])
 
     await bot.send_message(
         chat_id=MASTER_ID,
         text=(
             "📩 **Нове замовлення!**\n\n"
             f"👤 Клієнт: @{username}\n"
-            f"💅 Послуга: {escape_md(order['service'])}\n"
-            f"📅 Дата: {escape_md(order['date'])}\n"
-            f"⏰ Час: {escape_md(order['time'])}"
+            f"💅 Послуга: {service}\n"
+            f"📅 Дата: {date}\n"
+            f"⏰ Час: {time_text}"
         ),
         parse_mode="MarkdownV2"
     )
 
-
-
-# ───────────────
-# КОНТАКТИ
-# ───────────────
-@dp.callback_query(F.data == "contacts")
-async def contacts(call: CallbackQuery):
-    await call.message.edit_text(
-        "📞 **Контакти**\n\n"
-        "Instagram: @your_instagram\n"
-        "Телефон: +380 XX XXX XX XX",
-        parse_mode="Markdown",
-        reply_markup=main_menu()
-    )
 
 # ───────────────
 # ЗАПУСК
@@ -174,5 +172,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
