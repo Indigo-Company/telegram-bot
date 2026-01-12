@@ -114,6 +114,8 @@ async def get_date(message: Message):
     )
 
 
+from aiogram.utils.markdown import escape_md
+
 @dp.callback_query(F.data.startswith("time_"))
 async def choose_time(call: CallbackQuery):
     time = call.data.replace("time_", "")
@@ -133,17 +135,21 @@ async def choose_time(call: CallbackQuery):
     )
 
     # 🔔 Повідомлення майстру
+    username = call.from_user.username or "без_username"
+    username = escape_md(username)  # Экранируем спецсимволы для MarkdownV2
+
     await bot.send_message(
         chat_id=MASTER_ID,
         text=(
             "📩 **Нове замовлення!**\n\n"
-            f"👤 Клієнт: @{call.from_user.username or 'без username'}\n"
-            f"💅 Послуга: {order['service']}\n"
-            f"📅 Дата: {order['date']}\n"
-            f"⏰ Час: {order['time']}"
+            f"👤 Клієнт: @{username}\n"
+            f"💅 Послуга: {escape_md(order['service'])}\n"
+            f"📅 Дата: {escape_md(order['date'])}\n"
+            f"⏰ Час: {escape_md(order['time'])}"
         ),
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"
     )
+
 
 
 # ───────────────
@@ -168,4 +174,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
