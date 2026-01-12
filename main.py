@@ -1,10 +1,22 @@
 import asyncio
 import logging
 import os
+import sys
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+if not BOT_TOKEN:
+    print("❌ BOT_TOKEN не найден")
+    sys.exit(1)
+
+logging.basicConfig(level=logging.INFO)
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -30,3 +42,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
