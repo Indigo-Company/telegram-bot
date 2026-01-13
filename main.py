@@ -12,7 +12,6 @@ from aiogram.types import (
 )
 from aiogram.filters import Command
 
-# ───────────── НАСТРОЙКИ ─────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MASTER_ID = int(os.getenv("MASTER_ID"))
 MASTER_PHONE = "+380939547603"
@@ -22,7 +21,6 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
-# ───────────── ПОСЛУГИ (МЕНЯЕШЬ ТУТ) ─────────────
 SERVICES = [
     "Класичний манікюр",
     "Манікюр + гель-лак",
@@ -32,11 +30,9 @@ SERVICES = [
 
 TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00"]
 
-# ───────────── ХРАНЕНИЕ ─────────────
 user_states = {}
 user_orders = {}
 
-# ───────────── КЛАВИАТУРЫ ─────────────
 def main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -56,7 +52,6 @@ def phone_keyboard():
         one_time_keyboard=True
     )
 
-# ───────────── START ─────────────
 @dp.message(Command("start"))
 async def start(message: Message):
     await message.answer(
@@ -64,7 +59,6 @@ async def start(message: Message):
         reply_markup=main_keyboard()
     )
 
-# ───────────── ЗАПИС ─────────────
 @dp.message(F.text == "🛒 Записатися")
 async def start_order(message: Message):
     kb = InlineKeyboardMarkup(
@@ -98,7 +92,6 @@ async def choose_time(call: CallbackQuery):
         reply_markup=phone_keyboard()
     )
 
-# ───────────── ПОЛУЧЕНИЕ ТЕЛЕФОНА ─────────────
 @dp.message(F.contact)
 async def get_phone(message: Message):
     uid = message.from_user.id
@@ -125,7 +118,6 @@ async def get_phone(message: Message):
         f"⏰ {order['time']}"
     )
 
-# ───────────── СКАСУВАННЯ ─────────────
 @dp.message(F.text == "❌ Скасувати запис")
 async def cancel_order(message: Message):
     orders = user_orders.get(message.from_user.id)
@@ -159,7 +151,6 @@ async def confirm_cancel(call: CallbackQuery):
         f"📅 {order['date']} {order['time']}"
     )
 
-# ───────────── ИНФО ─────────────
 @dp.message(F.text == "📜 Наші Послуги")
 async def show_services(message: Message):
     await message.answer(
@@ -183,9 +174,9 @@ async def feedback(message: Message):
         reply_markup=main_keyboard()
     )
 
-# ───────────── RUN ─────────────
 async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
